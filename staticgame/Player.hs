@@ -28,46 +28,43 @@ data Cards = Cards {
   leadCards::Maybe [Card]
 }
 
-
-playCard :: PlayerId -> [Card] -> [(PlayerId, Int)] -> Card -> [Trick] -> Trick -> Card
-playCard myid cs bids trump@(Card trumpSuit _) trickPlayed currentTrick
+playCard :: PlayFunc
+-- playCard :: PlayerId -> [Card] -> [(PlayerId, Int)] -> Card -> [Trick] -> Trick -> Card
+playCard myid cs bids trump trickPlayed currentTrick
   | currentScore < myBid =
-    if length highWinProbCards > (currentScore - myBid) then
+    if length largeCards > (currentScore - myBid) then
       case loseTrick of
         [] -> cardsMinimum myCards
-        otherwise -> if null (intersect highWinProbCards loseTrick) then
-          last highWinProbCards
+        _ -> if null (intersect largeCards loseTrick) then
+          last largeCards
           else
-            last (intersect highWinProbCards loseTrick)
+            last (intersect largeCards loseTrick)
     else
       cardsMaximum myCards
   | currentScore == myBid =
     case loseTrick of
       [] -> cardsMinimum myCards
-      otherwise -> last loseTrick
+      _ -> last loseTrick
   | currentScore > myBid =
-    if null highWinProbCards then
+    if null largeCards then
       cardsMinimum myCards
     else
-      case highWinProbCards of
+      case largeCards of
         [] -> case leadCards myCards of
           Nothing -> cardsMinimum myCards
           Just ls -> minimum ls
-        otherwise -> last highWinProbCards
+        _ -> last largeCards
+    where
+      maybeLeadCard = (pure currentTrick >>= (\x -> case x of
+        [] -> Nothing
+        (_:_) -> Just $ fst $ last currentTrick))
 
-  where
-    maybeLeadCard = (pure currentTrick >>= (\x -> case x of
-      [] -> Nothing
-      (_:_) -> Just $ fst $ last currentTrick))
-
-    myCards = sortCards trump maybeLeadCard cs
-
-    currentLeadSuit = leadSuit currentTrick
-    myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
-    currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner trumpSuit) <$> trickPlayed)
-    currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
-    highWinProbCards = getWinProbCards 0.8 (renegCards myCards ++ trumpCards myCards) currentPossibleCards
-    loseTrick = guaranteeLoseTrick trump myCards currentTrick
+      myCards = sortCards trump maybeLeadCard cs
+      myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
+      currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner $ cardSuit trump) <$> trickPlayed)
+      currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
+      largeCards = getWinProbCards 0.8 (renegCards myCards ++ trumpCards myCards) currentPossibleCards
+      loseTrick = guaranteeLoseTrick trump myCards currentTrick
 
 
 cardsMinimum :: Cards -> Card
@@ -97,21 +94,25 @@ cardsMaximum cs = case leadCards cs of
 -- -> [Int]  -- ^ bids so far
 -- -> Int
 -- BidFunc :: Card -> [Card] -> Int -> [Int] -> Int
-allAceAndKing :: Double
-allAceAndKing = 8
-allCards :: Double
-allCards = 52
+
 makeBid :: Card -> [Card] -> Int -> [Int] -> Int
 makeBid trump cs playerNum bids =
   let
     myCards = sortCards trump Nothing cs
     avgWinExpectation = averageWinExpectation trump (renegCards myCards ++ trumpCards myCards) sortedDeck
     forbidenBid = length cs - sum bids
-    standardBidSum = allAceAndKing / allCards * fromIntegral ((length cs) * playerNum)
+    standardBS = standardBidSum playerNum cs
     bidSum = fromIntegral $ sum bids :: Double
+    targetBid = (numOfAce (trumpCards myCards ++ renegCards myCards)) + quot (numOfKing (trumpCards myCards)) 2
+      + if (avgWinExpectation > 0.8 && bidSum < standardBS) then 1 else 0
   in
-    (numOfAce (trumpCards myCards ++ renegCards myCards)) + quot (numOfKing (trumpCards myCards)) 2
-      + if (avgWinExpectation > 0.8 && bidSum < standardBidSum) then 1 else 0
+    if targetBid /= forbidenBid then
+      targetBid
+    else
+      if targetBid == 0 then
+        1
+      else
+        targetBid - 1
 
 -- | return the set of card that would guarantee the lose of current trick
 -- it is done by get all the cards that less that the max cards that has been played
@@ -131,23 +132,25 @@ guaranteeLoseTrick trump myCards trick =
       else
         renegCards myCards
 
-leadSuit :: Trick -> Maybe Suit
-leadSuit myCards
-  | null myCards = Nothing
-  | otherwise = let (Card suit _, _) = last myCards in Just suit
+-- | found this function not useful at end, keep as backup
+-- leadSuit :: Trick -> Maybe Suit
+-- leadSuit myCards
+--   | null myCards = Nothing
+--   | otherwise = let (Card suit _, _) = last myCards in Just suit
 
 
 
--- domain must be sorted in ascending order when passed in this function
-highWinProb :: Double -> Cards -> [Card] -> Trick -> [Card]
-highWinProb winProb myCards domain [] =
-  case trumpCards myCards of
-    [] -> getWinProbCards winProb (renegCards myCards) domain
-    otherwise -> getWinProbCards winProb (renegCards myCards ++ trumpCards myCards) domain
-highWinProb winProb myCards domain trick =
-  case (leadCards myCards) of
-    Just ls -> getWinProbCards winProb ls domain
-    Nothing -> getWinProbCards winProb (trumpCards myCards) domain
+-- | domain must be sorted in ascending order when passed in this function
+-- A backup interface for Cards, but didn't found it very useful
+-- highWinProb :: Double -> Cards -> [Card] -> Trick -> [Card]
+-- highWinProb winProb myCards domain [] =
+--   case trumpCards myCards of
+--     [] -> getWinProbCards winProb (renegCards myCards) domain
+--     _ -> getWinProbCards winProb (renegCards myCards ++ trumpCards myCards) domain
+-- highWinProb winProb myCards domain _ =
+--   case (leadCards myCards) of
+--     Just ls -> getWinProbCards winProb ls domain
+--     Nothing -> getWinProbCards winProb (trumpCards myCards) domain
 
 
 getWinProbCards :: Double -> [Card] -> [Card] -> [Card]
@@ -164,10 +167,6 @@ cardsOfSuitInTrick suit trick = fmap fst (filter (\(c, _) -> cardSuit c == suit)
 
 standardBidSum :: Int -> [Card] -> Double
 standardBidSum playerNum cs = (1/13) * fromIntegral (playerNum * (length cs))
--- | translate the rank of card to value
--- [Two .. Ace] correspond to [1 .. 13]
-cardValueInSameSuit :: Card -> Int
-cardValueInSameSuit card = snd $ head $ filter (\(r, _) ->  (cardRank card) == r) (zip [Two .. Ace] [0 .. 12])
 
 -- | for each card in a sorted card list calculate the chance of win under that cards
 cardsWinExpectation :: [Card] -> [(Card, Double)]
