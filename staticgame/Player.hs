@@ -11,17 +11,7 @@ import OhTypes
 import OhHell
 import Data.List
 import Data.Maybe
--- | Play a card for the current trick.
--- If you are the "lead" player, you must follow the suit of the card that was led.
--- type PlayFunc
---   =  PlayerId     -- ^ this player's Id so they can identify themselves in the bids and tricks
---   -> [Card]       -- ^ the player's cards
---   -> [(PlayerId,Int)]-- ^ all players' bids
---   -> Card         -- ^ trump card
---   -> [Trick]      -- ^ tricks played so far
---   -> Trick        -- ^ cards in the current trick so far
---   -> Card         -- ^ the player's chosen card
--- type Trick = [(Card, PlayerId)]
+
 data Cards = Cards {
   renegCards::[Card],
   trumpCards::[Card],
@@ -29,7 +19,6 @@ data Cards = Cards {
 }
 
 playCard :: PlayFunc
--- playCard :: PlayerId -> [Card] -> [(PlayerId, Int)] -> Card -> [Trick] -> Trick -> Card
 playCard myid cs bids trump trickPlayed currentTrick
   | currentScore < myBid =
     if length largeCards > (currentScore - myBid) then
@@ -95,7 +84,7 @@ cardsMaximum cs = case leadCards cs of
 -- -> Int
 -- BidFunc :: Card -> [Card] -> Int -> [Int] -> Int
 
-makeBid :: Card -> [Card] -> Int -> [Int] -> Int
+makeBid :: BidFunc
 makeBid trump cs playerNum bids =
   let
     myCards = sortCards trump Nothing cs
