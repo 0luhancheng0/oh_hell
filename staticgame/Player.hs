@@ -10,8 +10,20 @@ according to multiple criteria of the cards in hand
 2. the number of ace in all non-trump cards, contributed bid will be the total
   number divide by two (integer division)
 3. if the the cards in hand in average greater than (1 - 1/(number of player)) of all possible cards
-  and the sum of
+  and the sum of others bid is less than the expected sum of bid, then another bid will be added
+The strategy will tend to underbid rather than overbid
 
+For playCard function, it has been divided into three cases
+For the case that current score is less than the bid
+  consider how many large cards are in hand, if too many, then throw the card while keep bid under control
+    if there isn't a card that can be throwed while keep lose trick, then throw the largest one to attemp win the trick
+  if too few large cards, then if there is no card can win, then throw the middle card, which will make following trick easier
+  else return the larest card in suit to attemp win
+For the case that current score is equal to the bid
+  always play the largest card that guarantee lose, if there is no such card guarantee lose, then play the smallest
+For the case that current score is larger than bid
+  the trick is screwed, then throw largest or smallest card to mess up others
+  
 -}
 
 import OhTypes
@@ -28,7 +40,7 @@ data Cards = Cards {
 playCard :: PlayFunc
 playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore myBid of
   LT ->
-    if length largeCards > (currentScore - myBid) then
+    if length largeCards > (myBid - currentScore) then
       case loseTrick of
         [] -> cardsMinimum myCards
         _ -> if null (intersect largeCards loseTrick) then
@@ -36,7 +48,10 @@ playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore
           else
             last (intersect largeCards loseTrick)
     else
-      cardsMaximum myCards
+      if elem (cardsMaximum myCards) loseTrick then
+        takeMid myCards
+      else
+        cardsMaximum myCards
   EQ ->
     case loseTrick of
       [] -> cardsMinimum myCards
@@ -55,7 +70,11 @@ playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore
     myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
     currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner $ cardSuit trump) <$> trickPlayed)
     currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
-    largeCards = getWinProbCards (1 - 1/(fromIntegral playerNum)) (renegCards myCards ++ trumpCards myCards) currentPossibleCards
+    largeCards = getWinProbCards (1 - 1/(fromIntegral playerNum))
+                                (case leadCards myCards of
+                                  Nothing -> renegCards myCards ++ trumpCards myCards
+                                  Just lc -> lc)
+                                currentPossibleCards
     loseTrick = guaranteeLoseTrick trump myCards currentTrick
 
 -- | return the minimum card in a Cards
@@ -178,3 +197,11 @@ cardSuit (Card s _) = s
 -- | cardRank return the rank of a given card
 cardRank :: Card -> Rank
 cardRank (Card _ r) = r
+
+takeMid :: Cards -> Card
+takeMid myCards =
+  case leadCards myCards of
+    Nothing -> rtCards !! (quot (length rtCards) 2)
+    Just lc -> lc !! (quot (length lc) 2)
+  where
+    rtCards = (renegCards myCards ++ trumpCards myCards)
