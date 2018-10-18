@@ -32,7 +32,7 @@ playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore
       case loseTrick of
         [] -> cardsMinimum myCards
         _ -> if null (intersect largeCards loseTrick) then
-          last largeCards
+            if null largeCards then maximum loseTrick else last largeCards
           else
             last (intersect largeCards loseTrick)
     else
@@ -45,11 +45,7 @@ playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore
     if null largeCards then
       cardsMinimum myCards
     else
-      case largeCards of
-        [] -> case leadCards myCards of
-          Nothing -> cardsMinimum myCards
-          Just ls -> minimum ls
-        _ -> last largeCards
+      last largeCards
   where
     maybeLeadCard = (pure currentTrick >>= (\x -> case x of
       [] -> Nothing
@@ -163,12 +159,12 @@ sortCards trump leadCard myCards
   | otherwise =
     Cards (sort [x | x <- myCards, not (istrump x) && not (islead x)])
           (sort [x | x <- myCards, (istrump x) && not (islead x)])
-          (Just $ sort [x | x <- myCards, islead x])
+          ((Just $ sort [x | x <- myCards, islead x]) >>= (\x -> if null x then Nothing else Just x))
     where
       istrump = suitEq trump
-      islead c
-        | leadCard == Nothing = True
-        | otherwise = suitEq (fromJust leadCard) c
+      islead c = case leadCard of
+        Nothing -> False
+        Just lc -> suitEq lc c
 
 
 -- | suitEq test if given two card have the same suit
