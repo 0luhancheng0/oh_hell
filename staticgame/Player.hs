@@ -4,7 +4,14 @@ module Player (
 )
 where
 {-
-Write a report describing your design and strategy here.
+Before the start of each hand, the make bid function will return a integer
+according to multiple criteria of the cards in hand
+1. the number of ace and king in card, each of them contribute 1 to bid
+2. the number of ace in all non-trump cards, contributed bid will be the total
+  number divide by two (integer division)
+3. if the the cards in hand in average greater than (1 - 1/(number of player)) of all possible cards
+  and the sum of
+
 -}
 
 import OhTypes
@@ -19,8 +26,8 @@ data Cards = Cards {
 }
 
 playCard :: PlayFunc
-playCard myid cs bids trump trickPlayed currentTrick
-  | currentScore < myBid =
+playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore myBid of
+  LT ->
     if length largeCards > (currentScore - myBid) then
       case loseTrick of
         [] -> cardsMinimum myCards
@@ -30,11 +37,11 @@ playCard myid cs bids trump trickPlayed currentTrick
             last (intersect largeCards loseTrick)
     else
       cardsMaximum myCards
-  | currentScore == myBid =
+  EQ ->
     case loseTrick of
       [] -> cardsMinimum myCards
       _ -> last loseTrick
-  | currentScore > myBid =
+  GT ->
     if null largeCards then
       cardsMinimum myCards
     else
@@ -43,30 +50,31 @@ playCard myid cs bids trump trickPlayed currentTrick
           Nothing -> cardsMinimum myCards
           Just ls -> minimum ls
         _ -> last largeCards
-    where
-      maybeLeadCard = (pure currentTrick >>= (\x -> case x of
-        [] -> Nothing
-        (_:_) -> Just $ fst $ last currentTrick))
+  where
+    maybeLeadCard = (pure currentTrick >>= (\x -> case x of
+      [] -> Nothing
+      (_:_) -> Just $ fst $ last currentTrick))
+    playerNum = length bids
+    myCards = sortCards trump maybeLeadCard cs
+    myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
+    currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner $ cardSuit trump) <$> trickPlayed)
+    currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
+    largeCards = getWinProbCards (1 - 1/(fromIntegral playerNum)) (renegCards myCards ++ trumpCards myCards) currentPossibleCards
+    loseTrick = guaranteeLoseTrick trump myCards currentTrick
 
-      myCards = sortCards trump maybeLeadCard cs
-      myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
-      currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner $ cardSuit trump) <$> trickPlayed)
-      currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
-      largeCards = getWinProbCards 0.8 (renegCards myCards ++ trumpCards myCards) currentPossibleCards
-      loseTrick = guaranteeLoseTrick trump myCards currentTrick
-
-
+-- | return the minimum card in a Cards
 cardsMinimum :: Cards -> Card
 cardsMinimum cs = case leadCards cs of
   Nothing -> minimum (renegCards cs ++ trumpCards cs)
   Just ls -> minimum ls
 
+-- | return the maximum card in Cards
 cardsMaximum :: Cards -> Card
 cardsMaximum cs = case leadCards cs of
   Nothing -> maximum (renegCards cs ++ trumpCards cs)
   Just ls -> maximum ls
 
-
+-- | return the proper bid number
 makeBid :: BidFunc
 makeBid trump cs playerNum bids =
   let
@@ -75,8 +83,10 @@ makeBid trump cs playerNum bids =
     forbidenBid = length cs - sum bids
     standardBS = standardBidSum playerNum cs
     bidSum = fromIntegral $ sum bids :: Double
-    targetBid = (numOfAce (trumpCards myCards ++ renegCards myCards)) + quot (numOfKing (trumpCards myCards)) 2
-      + if (avgWinExpectation > 0.8 && bidSum < standardBS) then 1 else 0
+    targetBid = (numOfAce (trumpCards myCards))
+      + (numOfKing (trumpCards myCards))
+      + quot (numOfAce (renegCards myCards)) 2
+      + if (avgWinExpectation >  (1 - 1/(fromIntegral playerNum)) && bidSum < standardBS) then 1 else 0
   in
     if targetBid /= forbidenBid then
       targetBid
@@ -117,7 +127,7 @@ trumpPlayed trump trick = any (\(c, _) -> suitEq trump c) trick
 cardsOfSuitInTrick :: Suit -> Trick -> [Card]
 cardsOfSuitInTrick suit trick = fmap fst (filter (\(c, _) -> cardSuit c == suit) trick)
 
--- | return the expected total bid number if other player consider number of king and ace as the bid number 
+-- | return the expected total bid number if other player consider number of king and ace as the bid number
 standardBidSum :: Int -> [Card] -> Double
 standardBidSum playerNum cs = (8/52) * fromIntegral (playerNum * (length cs))
 
