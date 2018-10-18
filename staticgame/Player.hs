@@ -66,23 +66,6 @@ cardsMaximum cs = case leadCards cs of
   Nothing -> maximum (renegCards cs ++ trumpCards cs)
   Just ls -> maximum ls
 
-    -- currentLeadSuit >>= (\x -> case x of
-    --   Nothing -> Just $ chooseLeadCard  )
-
-
-
-
--- chooseLeadCard :: [Card] -> Card
-
--- | Bid the number of cards you can win based on the trump card and your hand.
---   last player to bid must obey "hook rule":
---   sum of bids must not equal number of tricks available
--- BidFunc = Card    -- ^ trump card
--- -> [Card] -- ^ list of cards in the player's hand
--- -> Int    -- ^ number of players
--- -> [Int]  -- ^ bids so far
--- -> Int
--- BidFunc :: Card -> [Card] -> Int -> [Int] -> Int
 
 makeBid :: BidFunc
 makeBid trump cs playerNum bids =
@@ -121,30 +104,11 @@ guaranteeLoseTrick trump myCards trick =
       else
         renegCards myCards
 
--- | found this function not useful at end, keep as backup
--- leadSuit :: Trick -> Maybe Suit
--- leadSuit myCards
---   | null myCards = Nothing
---   | otherwise = let (Card suit _, _) = last myCards in Just suit
-
-
-
--- | domain must be sorted in ascending order when passed in this function
--- A backup interface for Cards, but didn't found it very useful
--- highWinProb :: Double -> Cards -> [Card] -> Trick -> [Card]
--- highWinProb winProb myCards domain [] =
---   case trumpCards myCards of
---     [] -> getWinProbCards winProb (renegCards myCards) domain
---     _ -> getWinProbCards winProb (renegCards myCards ++ trumpCards myCards) domain
--- highWinProb winProb myCards domain _ =
---   case (leadCards myCards) of
---     Just ls -> getWinProbCards winProb ls domain
---     Nothing -> getWinProbCards winProb (trumpCards myCards) domain
-
-
+-- | get the cards that above one perticular number (within [0, 1]) in a specified domain
 getWinProbCards :: Double -> [Card] -> [Card] -> [Card]
 getWinProbCards winProb cs domain = map fst (filter (\(c, d) -> (elem c cs) && (d > winProb)) (cardsWinExpectation domain))
 
+-- | check if the trump card has been played in a given trick
 trumpPlayed :: Card -> Trick -> Bool
 trumpPlayed trump trick = any (\(c, _) -> suitEq trump c) trick
 
@@ -153,14 +117,13 @@ trumpPlayed trump trick = any (\(c, _) -> suitEq trump c) trick
 cardsOfSuitInTrick :: Suit -> Trick -> [Card]
 cardsOfSuitInTrick suit trick = fmap fst (filter (\(c, _) -> cardSuit c == suit) trick)
 
-
+-- | return the expected total bid number if other player consider number of king and ace as the bid number 
 standardBidSum :: Int -> [Card] -> Double
-standardBidSum playerNum cs = (1/13) * fromIntegral (playerNum * (length cs))
+standardBidSum playerNum cs = (8/52) * fromIntegral (playerNum * (length cs))
 
 -- | for each card in a sorted card list calculate the chance of win under that cards
 cardsWinExpectation :: [Card] -> [(Card, Double)]
 cardsWinExpectation cs =  zip cs ((\x -> (fromIntegral x) / fromIntegral (length cs)) <$> [1 .. (length cs)])
-
 
 -- | produce a double value represent how likely a hand of cards would win
 -- in the domain of all cards
@@ -171,19 +134,14 @@ averageWinExpectation trump cs cardsDomain = (foldl (\acc -> \(_, p) -> acc + p)
     sortedCardsDomainList = (renegCards sortedCardsDomain) ++ (trumpCards sortedCardsDomain)
     l = filter (\(c, _) -> elem c cs) (cardsWinExpectation sortedCardsDomainList)
 
-
-
-
-
-
-
-
--- processCards :: ([Card], [Card]) -> ((Double, Double), (Int, Int), (Int, Int))
--- processCards (a, b) = ((mean a, mean b), (median a, median b), (diviation a, diviation b))
+-- | return the number of Ace in a list cards
 numOfAce :: [Card] -> Int
 numOfAce = length . (filter ((==Ace) . cardRank))
+
+-- | return the number of King in a list of cards
 numOfKing :: [Card] -> Int
 numOfKing = length . (filter ((==King) . cardRank))
+
 -- | sortCards take a trump card, the lead suit and the a list of
 -- cards then produce a list of sorted cards accordingly
 sortCards :: Card -> Maybe Card -> [Card] -> Cards
