@@ -23,7 +23,7 @@ For the case that current score is equal to the bid
   always play the largest card that guarantee lose, if there is no such card guarantee lose, then play the smallest
 For the case that current score is larger than bid
   the trick is screwed, then throw largest or smallest card to mess up others
-  
+
 -}
 
 import OhTypes
@@ -198,6 +198,7 @@ cardSuit (Card s _) = s
 cardRank :: Card -> Rank
 cardRank (Card _ r) = r
 
+-- | take the playable card that is in the middle of hand
 takeMid :: Cards -> Card
 takeMid myCards =
   case leadCards myCards of
