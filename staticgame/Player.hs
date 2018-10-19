@@ -31,6 +31,7 @@ import OhHell
 import Data.List
 import Data.Maybe
 
+-- a hand of cards
 data Cards = Cards {
   renegCards::[Card],
   trumpCards::[Card],
@@ -40,61 +41,69 @@ data Cards = Cards {
 playCard :: PlayFunc
 playCard myid cs bids trump trickPlayed currentTrick = case compare currentScore myBid of
   LT ->
-    if length largeCards > (myBid - currentScore) then
-      case loseTrick of
-        [] -> cardsMinimum myCards
+    if length largeCards > (myBid - currentScore) then -- if there is too many large cards
+      case loseTrick of -- consider the cards guarantee lose
+        [] -> cardsMinimum myCards -- play minimum card to lose current trick
         _ -> if null (intersect largeCards loseTrick) then
             if null largeCards then maximum loseTrick else last largeCards
           else
-            last (intersect largeCards loseTrick)
+            last (intersect largeCards loseTrick) -- play the largest card that can lose the current trick
     else
       if elem (cardsMaximum myCards) loseTrick then
-        takeMid myCards
+        takeMid myCards -- any playable card will lose the trick, take a middle one, to make the following easier
       else
-        cardsMaximum myCards
+        cardsMaximum myCards -- try win the current trick
+
+  -- if the current score is equal to the bid number
   EQ ->
-    case loseTrick of
-      [] -> cardsMinimum myCards
-      _ -> last loseTrick
+    case loseTrick of -- consider those cards guarantee lose
+      [] -> cardsMinimum myCards -- play minimum card in cards
+      _ -> last loseTrick -- play the largest card of them
+
+  -- if the current score is already over the target bid, then play cards
+  -- that may break others bid
   GT ->
     if null largeCards then
       cardsMinimum myCards
     else
       last largeCards
   where
+    -- get the lead card wrapped in maybe
     maybeLeadCard = (pure currentTrick >>= (\x -> case x of
       [] -> Nothing
       (_:_) -> Just $ fst $ last currentTrick))
-    playerNum = length bids
-    myCards = sortCards trump maybeLeadCard cs
+    playerNum = length bids -- number of players
+    myCards = sortCards trump maybeLeadCard cs -- construct the cards in hand
     myBid = snd $ head $ filter (\(a, _) -> a == myid) bids
     currentScore = foldl (\current -> \pid -> if pid == myid then current + 1 else current) 0 ((winner $ cardSuit trump) <$> trickPlayed)
-    currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed))
+    currentPossibleCards = sortedDeck \\ (foldl (\acc -> \(c, _) -> c:acc) [] (concat trickPlayed)) -- get the difference between all cards with the cards have been played
+
+    --  get the palyabel cards that has probility that greater than (1 - 1/number of player)
     largeCards = getWinProbCards (1 - 1/(fromIntegral playerNum))
                                 (case leadCards myCards of
                                   Nothing -> renegCards myCards ++ trumpCards myCards
                                   Just lc -> lc)
                                 currentPossibleCards
-    loseTrick = guaranteeLoseTrick trump myCards currentTrick
+    loseTrick = guaranteeLoseTrick trump myCards currentTrick -- get the cards that guarantee lose in current trick
 
--- | return the minimum card in a Cards
+-- return the minimum card in a Cards
 cardsMinimum :: Cards -> Card
 cardsMinimum cs = case leadCards cs of
   Nothing -> minimum (renegCards cs ++ trumpCards cs)
   Just ls -> minimum ls
 
--- | return the maximum card in Cards
+-- return the maximum card in Cards
 cardsMaximum :: Cards -> Card
 cardsMaximum cs = case leadCards cs of
   Nothing -> maximum (renegCards cs ++ trumpCards cs)
   Just ls -> maximum ls
 
--- | return the proper bid number
+-- return the proper bid number
 makeBid :: BidFunc
 makeBid trump cs playerNum bids =
   let
-    myCards = sortCards trump Nothing cs
-    avgWinExpectation = averageWinExpectation trump (renegCards myCards ++ trumpCards myCards) sortedDeck
+    myCards = sortCards trump Nothing cs -- construct the cards in hand
+    avgWinExpectation = averageWinExpectation trump (renegCards myCards ++ trumpCards myCards) sortedDeck -- the expected win probility
     forbidenBid = length cs - sum bids
     standardBS = standardBidSum playerNum cs
     bidSum = fromIntegral $ sum bids :: Double
@@ -106,6 +115,7 @@ makeBid trump cs playerNum bids =
     if targetBid /= forbidenBid then
       targetBid
     else
+      -- if target bid is equal to the forbidenBid, then take one less, or if the forbidenBid is 0, then take 1
       if targetBid == 0 then
         1
       else
@@ -114,29 +124,36 @@ makeBid trump cs playerNum bids =
 -- | return the set of card that would guarantee the lose of current trick
 -- it is done by get all the cards that less that the max cards that has been played
 guaranteeLoseTrick :: Card -> Cards -> Trick -> [Card]
-guaranteeLoseTrick _ _ [] = []
+guaranteeLoseTrick _ _ [] = [] -- if the player is the first in current trick, there is no way to guarantee lose
 guaranteeLoseTrick trump myCards trick =
   case (leadCards myCards) of
-    Just ls ->
-      if (trumpPlayed trump trick) then
-        ls
-      else
-        filter ((<) $ (maximum (cardsOfSuitInTrick (cardSuit $ head ls) trick))) ls
-    Nothing ->
-      if (trumpPlayed trump trick) then
+    Just ls -> -- if the player can follow the lead suit
+      if null trumpCardsPlayed then ls else -- check if trump has been played
+        if suitEq trump (head ls) then filter ((<) (maximum trumpCardsPlayed)) ls else ls -- check the lead suit is trump suit
+    Nothing -> -- if the player cannot follow the lead suit
+      if not (null trumpCardsPlayed) then -- if trump has been played, the play the reneg cards or trump cards that less the maximum trump played
         renegCards myCards ++
-        filter ((<) $ (maximum (cardsOfSuitInTrick (cardSuit trump) trick))) (trumpCards myCards)
-      else
+        filter ((<) (maximum (cardsOfSuitInTrick (cardSuit trump) trick))) (trumpCards myCards)
+      else -- if trump is not played, then paly reneg card to ensure lose
         renegCards myCards
+  where
+    trumpCardsPlayed = trumpPlayed trump trick -- all the trumps that has been played in the current trick
 
 -- | get the cards that above one perticular number (within [0, 1]) in a specified domain
 getWinProbCards :: Double -> [Card] -> [Card] -> [Card]
-getWinProbCards winProb cs domain = map fst (filter (\(c, d) -> (elem c cs) && (d > winProb)) (cardsWinExpectation domain))
+getWinProbCards winProb cs domain = fst <$> (filter (\(c, d) -> (elem c cs) && (d > winProb)) (cardsWinExpectation domain))
 
--- | check if the trump card has been played in a given trick
-trumpPlayed :: Card -> Trick -> Bool
-trumpPlayed trump trick = any (\(c, _) -> suitEq trump c) trick
+-- | all the trump card has been played in a given trick
+trumpPlayed :: Card -> Trick -> [Card]
+trumpPlayed trump trick = fst <$> filter (\(c, _) -> suitEq trump c) trick
 
+-- | number of ace and king in all cards
+aceKingNum :: Double
+aceKingNum = 8.0
+
+-- | total number of cards
+totalCardsNum :: Double
+totalCardsNum = 52.0
 
 -- | filter out the cards have the given suit
 cardsOfSuitInTrick :: Suit -> Trick -> [Card]
@@ -144,7 +161,7 @@ cardsOfSuitInTrick suit trick = fmap fst (filter (\(c, _) -> cardSuit c == suit)
 
 -- | return the expected total bid number if other player consider number of king and ace as the bid number
 standardBidSum :: Int -> [Card] -> Double
-standardBidSum playerNum cs = (8/52) * fromIntegral (playerNum * (length cs))
+standardBidSum playerNum cs = (aceKingNum/totalCardsNum) * fromIntegral (playerNum * (length cs))
 
 -- | for each card in a sorted card list calculate the chance of win under that cards
 cardsWinExpectation :: [Card] -> [(Card, Double)]
@@ -156,7 +173,7 @@ averageWinExpectation :: Card -> [Card] -> [Card] -> Double
 averageWinExpectation trump cs cardsDomain = (foldl (\acc -> \(_, p) -> acc + p) 0 l) / (fromIntegral (length l))
   where
     sortedCardsDomain = sortCards trump Nothing cardsDomain
-    sortedCardsDomainList = (renegCards sortedCardsDomain) ++ (trumpCards sortedCardsDomain)
+    sortedCardsDomainList = (renegCards sortedCardsDomain) ++ (trumpCards sortedCardsDomain) -- sort all cards
     l = filter (\(c, _) -> elem c cs) (cardsWinExpectation sortedCardsDomainList)
 
 -- | return the number of Ace in a list cards
