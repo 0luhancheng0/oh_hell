@@ -110,7 +110,7 @@ makeBid trump cs playerNum bids =
     targetBid = (numOfAce (trumpCards myCards))
       + (numOfKing (trumpCards myCards))
       + quot (numOfAce (renegCards myCards)) 2
-      + if (avgWinExpectation >  (1 - 1/(fromIntegral playerNum)) && bidSum < standardBS) then 1 else 0
+      + if (avgWinExpectation >  (1 - 1/(fromIntegral playerNum)) && bidSum < standardBS) then 1 else 0 -- check if others bid are high or low overall
   in
     if targetBid /= forbidenBid then
       targetBid
