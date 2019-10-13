@@ -1,5 +1,13 @@
 # ohhell, [instructions](https://docs.google.com/document/d/11rwDMXodqlxAjYlOyWvYiwVKjMB7jzeUtDFrYnAkct8/edit?usp=sharing)
 
-Please list any files within the repository that you have edited or added here,
-and an overview of your work here.
-You will also need comments within each of those files as usual.
+The only file changed is Player.hs
+Please refer the the report at the top of Player.hs as an overview of game logic
+
+## test
+```
+stack test
+```
+## run
+```
+stack exec staticgame
+```
